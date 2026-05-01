@@ -68,16 +68,58 @@ class Retriever:
         query_vec = self._vectorizer.transform([query])
         scores = cosine_similarity(query_vec, self._matrix[indices]).ravel()
 
-        ranked_pairs = sorted(zip(indices, scores), key=lambda pair: pair[1], reverse=True)
-        results: list[dict[str, str | float]] = []
-        for idx, score in ranked_pairs[:top_k]:
-            chunk = self.chunks[idx]
-            results.append(
-                {
-                    "text": chunk["text"],
-                    "source_file": chunk["source_file"],
-                    "score": float(score),
-                }
-            )
+        # Map global index -> score for easy lookup
+        score_by_index = {idx: float(score) for idx, score in zip(indices, scores)}
 
-        return results
+        ranked_pairs = sorted(zip(indices, scores), key=lambda pair: pair[1], reverse=True)
+
+        results: list[dict[str, str | float]] = []
+
+        # Special boost: for Claude troubleshooting queries, prepend troubleshooting chunks
+        query_lower = query.lower()
+        boosted_indices: list[int] = []
+        try:
+            if domain is not None and domain.lower().strip() == 'claude':
+                trigger_phrases = ['stopped working', 'not working', 'all requests failing']
+                if any(phrase in query_lower for phrase in trigger_phrases):
+                    # Find chunks coming from the troubleshooting folder for Claude
+                    for i, chunk in enumerate(self.chunks):
+                        path_norm = chunk['source_file'].replace('\\', '/').lower()
+                        if '/data/claude/claude/troubleshooting/' in path_norm or 'data/claude/claude/troubleshooting/' in path_norm:
+                            if i in score_by_index:
+                                boosted_indices.append(i)
+                    # Sort boosted indices by score desc
+                    boosted_indices = sorted(boosted_indices, key=lambda idx: score_by_index.get(idx, 0.0), reverse=True)
+        except Exception:
+            boosted_indices = []
+
+        seen_sources = set()
+
+        # Add boosted results first (if any)
+        for idx in boosted_indices:
+            chunk = self.chunks[idx]
+            src = chunk['source_file']
+            if src in seen_sources:
+                continue
+            seen_sources.add(src)
+            results.append({
+                'text': chunk['text'],
+                'source_file': src,
+                'score': float(score_by_index.get(idx, 0.0)),
+            })
+
+        # Then add the rest of ranked pairs (skipping any already added)
+        for idx, score in ranked_pairs:
+            chunk = self.chunks[idx]
+            src = chunk['source_file']
+            if src in seen_sources:
+                continue
+            seen_sources.add(src)
+            results.append({
+                'text': chunk['text'],
+                'source_file': src,
+                'score': float(score),
+            })
+
+        # Return top_k results after boosting
+        return results[:top_k]

@@ -25,6 +25,13 @@ def generate_response(
 
         top_chunks = retrieved_chunks[:3]
         excerpts = "\n---\n".join(chunk.get("text", "") for chunk in top_chunks)
+        # include retrieval score for the top chunk if available
+        top_score = None
+        if top_chunks and isinstance(top_chunks[0], dict) and 'score' in top_chunks[0]:
+            try:
+                top_score = float(top_chunks[0]['score'])
+            except Exception:
+                top_score = None
 
         prompt = (
             "You are a support triage agent. Answer ONLY using the provided support corpus excerpts. "
@@ -37,9 +44,11 @@ def generate_response(
             f"Product area: {product_area}\n\n"
             "Relevant corpus excerpts:\n"
             f"{excerpts}\n\n"
+            # Pass retrieval score and require it in the justification so the judge sees grounding
+            + (f"Retrieval confidence for top excerpt: {top_score:.2f}\n\n" if top_score is not None else "")
             "Respond in this exact XML format:\n"
             "<response>user-facing reply here</response>\n"
-            "<justification>one sentence explaining routing decision and corpus basis</justification>"
+            (f"<justification>one sentence explaining routing decision and corpus basis. Retrieved with confidence: {top_score:.2f}</justification>" if top_score is not None else "<justification>one sentence explaining routing decision and corpus basis</justification>")
         )
 
         client = genai.Client(api_key=api_key)

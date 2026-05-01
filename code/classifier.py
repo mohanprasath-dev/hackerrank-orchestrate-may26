@@ -26,6 +26,15 @@ def get_request_type(issue: str) -> Literal["product_issue", "feature_request", 
         return "invalid"
     
     issue_lower = issue.lower().strip()
+    # If the user is asking about team or employee management, classify as product_issue
+    team_management_keywords = [
+        'remove user', 'remove member', 'remove employee', 'remove team member', 'delete user',
+        'delete employee', 'deactivate user', 'suspend user', 'revoke access', 'manage team',
+        'manage users', 'manage employees', 'team member', 'employee', 'team admin',
+        'remove from team', 'add member', 'invite user', 'remove member from team'
+    ]
+    if any(kw in issue_lower for kw in team_management_keywords):
+        return "product_issue"
     
     # Check for invalid (harmful, gibberish, off-topic, malicious)
     invalid_patterns = [
