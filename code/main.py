@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -54,20 +55,12 @@ def _parse_agent_output(agent_output: object) -> tuple[str, str]:
 	if isinstance(agent_output, dict):
 		return str(agent_output.get("response", "")), str(agent_output.get("justification", ""))
 
-	text = str(agent_output or "")
-	response_marker = "<response>"
-	response_end_marker = "</response>"
-	justification_marker = "<justification>"
-	justification_end_marker = "</justification>"
+	raw = str(agent_output or "")
+	response_match = re.search(r'<response>(.*?)</response>', raw, re.DOTALL)
+	justification_match = re.search(r'<justification>(.*?)</justification>', raw, re.DOTALL)
 
-	response_text = text
-	justification_text = ""
-
-	if response_marker in text and response_end_marker in text:
-		response_text = text.split(response_marker, 1)[1].split(response_end_marker, 1)[0].strip()
-
-	if justification_marker in text and justification_end_marker in text:
-		justification_text = text.split(justification_marker, 1)[1].split(justification_end_marker, 1)[0].strip()
+	response_text = response_match.group(1).strip() if response_match else ""
+	justification_text = justification_match.group(1).strip() if justification_match else ""
 
 	return response_text, justification_text
 
