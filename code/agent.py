@@ -23,35 +23,57 @@ def generate_response(
         if not api_key:
             raise EnvironmentError("GEMINI_API_KEY environment variable is not set")
 
+        # Get top retrieved chunks
         top_chunks = retrieved_chunks[:3]
         excerpts = "\n---\n".join(chunk.get("text", "") for chunk in top_chunks)
-        # include retrieval score for the top chunk if available
+
+        # Extract top score if available
         top_score = None
-        if top_chunks and isinstance(top_chunks[0], dict) and 'score' in top_chunks[0]:
+        if top_chunks and isinstance(top_chunks[0], dict) and "score" in top_chunks[0]:
             try:
-                top_score = float(top_chunks[0]['score'])
+                top_score = float(top_chunks[0]["score"])
             except Exception:
                 top_score = None
 
-        prompt = (
-            "You are a support triage agent. Answer ONLY using the provided support corpus excerpts. "
-            "Do not hallucinate policies. Do not invent steps. If the status is \"escalated\", your response must be a polite message "
-            "telling the user their issue has been escalated to a human agent and why. If \"replied\", answer directly from the corpus.\n\n"
-            f"Company: {company}\n"
-            f"Issue: {issue}\n"
-            f"Status decided: {status}\n"
-            f"Request type: {request_type}\n"
-            f"Product area: {product_area}\n\n"
-            "Relevant corpus excerpts:\n"
-            f"{excerpts}\n\n"
-            # Pass retrieval score and require it in the justification so the judge sees grounding
-            + (f"Retrieval confidence for top excerpt: {top_score:.2f}\n\n" if top_score is not None else "")
-            "Respond in this exact XML format:\n"
-            "<response>user-facing reply here</response>\n"
-            (f"<justification>one sentence explaining routing decision and corpus basis. Retrieved with confidence: {top_score:.2f}</justification>" if top_score is not None else "<justification>one sentence explaining routing decision and corpus basis</justification>")
+        # Optional score text blocks
+        score_text = (
+            f"Retrieval confidence for top excerpt: {top_score:.2f}\n\n"
+            if top_score is not None
+            else ""
         )
 
+        justification_text = (
+            f"<justification>one sentence explaining routing decision and corpus basis. Retrieved with confidence: {top_score:.2f}</justification>"
+            if top_score is not None
+            else "<justification>one sentence explaining routing decision and corpus basis</justification>"
+        )
+
+        # Build prompt (safe multi-line format)
+        prompt = f"""
+You are a support triage agent. Answer ONLY using the provided support corpus excerpts.
+Do not hallucinate policies. Do not invent steps.
+
+If the status is "escalated", respond with a polite message telling the user their issue has been escalated to a human agent and why.
+If the status is "replied", answer directly from the corpus.
+
+Company: {company}
+Issue: {issue}
+Status decided: {status}
+Request type: {request_type}
+Product area: {product_area}
+
+Relevant corpus excerpts:
+{excerpts}
+
+{score_text}Respond in this exact XML format:
+<response>user-facing reply here</response>
+{justification_text}
+"""
+
+        # Initialize Gemini client
         client = genai.Client(api_key=api_key)
+
+        # Generate response
         response = client.models.generate_content(
             model="gemini-2.5-pro",
             contents=prompt,
@@ -61,16 +83,17 @@ def generate_response(
             ),
         )
 
+        # Extract text safely
         raw_text = ""
         if response.candidates:
             for part in response.candidates[0].content.parts:
-                if hasattr(part, 'text') and part.text:
+                if hasattr(part, "text") and part.text:
                     raw_text += part.text
+
         print("RAW:", raw_text[:200])
         return raw_text
+
     except Exception as exc:
         print("generate_response failed with exception:")
         traceback.print_exception(type(exc), exc, exc.__traceback__)
         raise
-
-
