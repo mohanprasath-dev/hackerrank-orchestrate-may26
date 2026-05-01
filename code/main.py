@@ -50,6 +50,28 @@ def _load_rows(input_path: Path) -> list[dict[str, str]]:
 		return list(reader)
 
 
+def _parse_agent_output(agent_output: object) -> tuple[str, str]:
+	if isinstance(agent_output, dict):
+		return str(agent_output.get("response", "")), str(agent_output.get("justification", ""))
+
+	text = str(agent_output or "")
+	response_marker = "<response>"
+	response_end_marker = "</response>"
+	justification_marker = "<justification>"
+	justification_end_marker = "</justification>"
+
+	response_text = text
+	justification_text = ""
+
+	if response_marker in text and response_end_marker in text:
+		response_text = text.split(response_marker, 1)[1].split(response_end_marker, 1)[0].strip()
+
+	if justification_marker in text and justification_end_marker in text:
+		justification_text = text.split(justification_marker, 1)[1].split(justification_end_marker, 1)[0].strip()
+
+	return response_text, justification_text
+
+
 def main() -> None:
 	load_dotenv(ROOT_DIR / ".env")
 
@@ -85,8 +107,7 @@ def main() -> None:
 			retrieved_chunks=chunks,
 		)
 
-		response = generated.get("response", "")
-		justification = generated.get("justification", "")
+		response, justification = _parse_agent_output(generated)
 
 		output_row = {
 			"issue": issue,
