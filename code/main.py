@@ -87,7 +87,8 @@ def main() -> None:
 		print(f"Processing ticket {index}/{total}...", flush=True)
 
 		status = router.decide(issue, subject, company)
-		chunks = retriever.retrieve(issue, domain)
+		query = f"{issue} {subject}"
+		chunks = retriever.retrieve(query, domain)
 		request_type = classifier.get_request_type(issue)
 		product_area = classifier.get_product_area(issue, company, chunks)
 		generated = agent.generate_response(

@@ -53,7 +53,7 @@ class Retriever:
                 )
         return chunks
 
-    def retrieve(self, query: str, domain: str | None, top_k: int = 5) -> list[dict[str, str | float]]:
+    def retrieve(self, query: str, domain: str | None, top_k: int = 8) -> list[dict[str, str | float]]:
         if not query or self._matrix is None:
             return []
 
